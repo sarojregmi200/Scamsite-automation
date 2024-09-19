@@ -1,4 +1,5 @@
 import { Browser, Page } from "puppeteer";
+
 import {
     XpathPrefix,
     authenticationUrl,
@@ -7,20 +8,21 @@ import {
     emailFeildXpath,
     loginUserId,
     loginUserPassword,
-    numbersToVerify,
     passwordFeildXpath,
     searchBoxXpath,
 } from "./Constants";
+
+import chalk from "chalk";
 
 export async function closeBrowser(browser: Browser) {
     await browser.close();
 }
 
-export async function authenticateSkit({ page }: { page: Page, browser: Browser }): Promise<boolean> {
+export async function authenticateScamSite({ page }: { page: Page, browser: Browser }): Promise<boolean> {
     await page.goto(authenticationUrl, { timeout: 0 });
 
     try {
-        console.log("Authenticating ...");
+        console.log(chalk.yellow("Authenticating to Scam site"));
 
         // locating and entering email
         const emailFeild = await page.waitForSelector(
@@ -28,7 +30,7 @@ export async function authenticateSkit({ page }: { page: Page, browser: Browser 
         );
         if (!emailFeild) throw new Error("No email feild found");
         await emailFeild.type(loginUserId);
-        console.log("email done...");
+        console.log(chalk.white("Email entered ..."));
 
         // entering password
         const passwordFeild = await page.waitForSelector(
@@ -36,25 +38,24 @@ export async function authenticateSkit({ page }: { page: Page, browser: Browser 
         );
         if (!passwordFeild) throw new Error("No password feild found");
         await passwordFeild.type(loginUserPassword);
-        console.log("Password done...");
+        console.log(chalk.white("Password entered ..."));
 
         await Promise.all([
             passwordFeild.press("Enter"),
             page.waitForNavigation({ timeout: 0 })
         ]);
 
-        console.log("Login sucessfull");
+        console.log(chalk.green("Authentication Successfull !!!"));
         return true;
     } catch (error) {
-        console.log(error);
+        console.log(chalk.bgRed(error));
         return false;
     }
 }
 
-
 export async function autoEntry(
-    { page, verifiedNumbers, browser }: { verifiedNumbers: number[], browser: Browser, page: Page, },
-): Promise<number> {
+    { page, verifiedNumbers, browser, amountOfNumbers }: { verifiedNumbers: number[], browser: Browser, page: Page, amountOfNumbers: number },
+) {
     try {
         await page.goto(dataEntryUrl, { waitUntil: "load", timeout: 0 });
         let verifiedCount = 0;
@@ -64,11 +65,11 @@ export async function autoEntry(
                 const newPage = await target.page();
                 await newPage?.close();
 
-                console.log("Popup closed");
+                console.log(chalk.blue("Popup closed"));
             }
         })
 
-        for (let i = 1; i <= numbersToVerify; i++) {
+        for (let i = 1; i <= amountOfNumbers; i++) {
             // getting the 2nd table
             const [, table] = await page.$$("table");
             if (!table) throw new Error("No table found");
@@ -90,7 +91,6 @@ export async function autoEntry(
             // clicking the whatsappicon
             const whatsAppIcon = await columns[2].$("a");
             if (!whatsAppIcon) throw new Error("No whatsapp Icon found");
-            console.log("clicking the whatsappIcon");
 
             await Promise.all([
                 whatsAppIcon?.click(),
@@ -103,7 +103,7 @@ export async function autoEntry(
                 // clicking the verify button.
                 const verifyBtn = await columns[3]?.waitForSelector("button");
                 if (!verifyBtn) {
-                    console.log("No verify button found");
+                    console.log(chalk.red("No verify button found"));
                     continue;
                 }
 
@@ -112,18 +112,17 @@ export async function autoEntry(
                     page.waitForNetworkIdle({ timeout: 0 }),
                 ]);
                 verifiedCount++;
-                console.log(`Confirmed Verified Numbers ${verifiedCount}`);
+                console.log(chalk.green(`Confirmed Verified Numbers ${verifiedCount}`));
             }
             else {
-                console.log(`Skipping ${phnumber}`);
                 // clicking the delete btn;
                 const deleteBtn = await columns[4]?.waitForSelector("button");
                 if (!deleteBtn) {
-                    console.log("No delete button found");
+                    console.log(chalk.red("No delete button found"));
                     continue;
                 }
 
-                console.log(`Deleting ${phnumber}`);
+                console.log(chalk.red(`Deleting ${phnumber}`));
 
                 await Promise.all([
                     deleteBtn.click(),
@@ -135,10 +134,8 @@ export async function autoEntry(
         }
 
     } catch (e) {
-        console.log("caught error", e);
+        console.log(chalk.red("caught error", e));
     }
-
-    return 0;
 }
 
 export async function authenticateWAPP({ page }: { page: Page }) {
@@ -150,7 +147,7 @@ export async function authenticateWAPP({ page }: { page: Page }) {
 
         if (!authenticated) throw new Error("Authentication failed");
 
-        console.log("Authenticated to whatsapp...");
+        console.log(chalk.green("Authenticated to whatsapp!!"));
         return true;
     }
     catch (e) {
@@ -172,17 +169,31 @@ export async function askStartingNumber() {
         return parseInt(startingNumber);
 }
 
+export async function askAmountOfNumbersToVerify() {
+    const prompt = "Enter the amount of Numbers you want to verify.";
+    process.stdout.write(prompt);
+
+    const amountOfNumbers = await new Promise<string>((resolve) => {
+        process.stdin.on("data", (data) => {
+            resolve(data.toString().trim());
+        });
+    });
+    if (amountOfNumbers)
+        return parseInt(amountOfNumbers);
+}
+
+
 export async function verifyPhoneNumbers(
-    { page, startingNumber }: { page: Page, startingNumber: number },
+    { page, startingNumber, amountOfNumbers }: { page: Page, startingNumber: number, amountOfNumbers: number },
 ): Promise<number[] | undefined> {
     const verifiedNumbers: number[] = []
 
     // authenticating
-    console.log("Authenticating to whatsapp...");
+    console.log(chalk.yellow("Authenticating to whatsapp!!"));
     const whatsappAuth = await authenticateWAPP({ page });
     if (!whatsappAuth) return;
 
-    console.log("searching for the search box");
+    console.log(chalk.white("Searching for the search box"));
     const searchBox = await page.waitForSelector(".lexical-rich-text-input");
     if (!searchBox) return;
     await searchBox.click();
@@ -192,7 +203,7 @@ export async function verifyPhoneNumbers(
     let itteration = 0;
 
     // for one time there are only 1000 numbers
-    while (itteration <= numbersToVerify) {
+    while (itteration <= amountOfNumbers) {
         itteration++;
         const phoneNumber = "+" + currentNumber;
         // verifying numbers
@@ -203,31 +214,32 @@ export async function verifyPhoneNumbers(
         await sleep(2);
 
         const numberDoesnotExist = await page.evaluate(() => {
-            console.log("Checking if the number exists");
             return document.body.innerHTML.toString().includes("No chats, contacts or messages found") ? true : false
         })
 
-        console.log(`current number: ${currentNumber} ${numberDoesnotExist
-            ? "donesnot Exists" : "Exists"}`)
+        console.log(`current number: ${currentNumber.toString().replace(/......../, "*********")} 
+                ${numberDoesnotExist ? chalk.red("donesnot Exists") : chalk.green("Exists")}`)
 
         if (!numberDoesnotExist) {
             verifiedNumbers.push(currentNumber)
             verifiedCount++;
-            console.log(`Verified numbers: ${verifiedCount}`)
+            console.log(chalk.green(`Verified numbers: ${verifiedCount}\n`))
         }
         currentNumber++;
 
         // clear the searchbox
         await searchBox.click();
+
         await page.keyboard.down("Control");
-        await searchBox.press("Backspace");
-        await searchBox.press("Backspace");
+        await searchBox.press("a");
         await page.keyboard.up("Control");
+
+        await searchBox.press("Backspace");
 
         // holding for 1 minute every 20 itterations, just incase whatsapp,
         // thinks we are a bot
         if (itteration % breakWhatsappCheckAt === 0) {
-            console.log("Holding for 1 minute");
+            console.log(chalk.bgYellow("Holding for 1 minute"));
             await sleep(60);
         }
     }
