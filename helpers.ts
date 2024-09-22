@@ -6,10 +6,13 @@ import {
     breakWhatsappCheckAt,
     dataEntryUrl,
     emailFeildXpath,
+    foundContactXpath,
     loginUserId,
     loginUserPassword,
+    notFoundContactXpath,
     passwordFeildXpath,
     searchBoxXpath,
+    searchResultContainer,
 } from "./Constants";
 
 import chalk from "chalk";
@@ -27,6 +30,7 @@ export async function authenticateScamSite({ page }: { page: Page, browser: Brow
         // locating and entering email
         const emailFeild = await page.waitForSelector(
             XpathPrefix + emailFeildXpath,
+            { timeout: 0 }
         );
         if (!emailFeild) throw new Error("No email feild found");
         await emailFeild.type(loginUserId);
@@ -35,6 +39,7 @@ export async function authenticateScamSite({ page }: { page: Page, browser: Brow
         // entering password
         const passwordFeild = await page.waitForSelector(
             XpathPrefix + passwordFeildXpath,
+            { timeout: 0 }
         );
         if (!passwordFeild) throw new Error("No password feild found");
         await passwordFeild.type(loginUserPassword);
@@ -101,7 +106,7 @@ export async function autoEntry(
             if (phnumber && verifiedNumbers.includes(parseInt(phnumber))) {
                 console.log(`Verifying ${phnumber}`);
                 // clicking the verify button.
-                const verifyBtn = await columns[3]?.waitForSelector("button");
+                const verifyBtn = await columns[3]?.waitForSelector("button", { timeout: 0 });
                 if (!verifyBtn) {
                     console.log(chalk.red("No verify button found"));
                     continue;
@@ -116,7 +121,7 @@ export async function autoEntry(
             }
             else {
                 // clicking the delete btn;
-                const deleteBtn = await columns[4]?.waitForSelector("button");
+                const deleteBtn = await columns[4]?.waitForSelector("button", { timeout: 0 });
                 if (!deleteBtn) {
                     console.log(chalk.red("No delete button found"));
                     continue;
@@ -140,7 +145,10 @@ export async function autoEntry(
 
 export async function authenticateWAPP({ page }: { page: Page }) {
     try {
-        await page.goto("https://web.whatsapp.com/", { waitUntil: "load" });
+        await page.goto("https://web.whatsapp.com/", {
+            waitUntil: "load",
+            timeout: 0
+        });
         const authenticated = await page.waitForSelector(XpathPrefix + searchBoxXpath, {
             timeout: 0,
         });
@@ -194,7 +202,11 @@ export async function verifyPhoneNumbers(
     if (!whatsappAuth) return;
 
     console.log(chalk.white("Searching for the search box"));
-    const searchBox = await page.waitForSelector(".lexical-rich-text-input");
+    const searchBox = await page.waitForSelector(XpathPrefix + searchBoxXpath,
+        { timeout: 0 }
+    );
+    await page.waitForNetworkIdle();
+
     if (!searchBox) return;
     await searchBox.click();
 
@@ -208,13 +220,27 @@ export async function verifyPhoneNumbers(
         const phoneNumber = "+" + currentNumber;
         // verifying numbers
         await searchBox.type(phoneNumber);
-        await searchBox.press("Enter");
 
-        // holds for 2 second just in case
         await sleep(2);
+        let result = await Promise.race([
+            await page.waitForSelector(XpathPrefix + foundContactXpath, {
+                timeout: 0,
+            }),
+            await page.waitForSelector(XpathPrefix + notFoundContactXpath, {
+                timeout: 0,
+            })
+        ]);
 
-        const numberDoesnotExist = await page.evaluate(() => {
-            return document.body.innerHTML.toString().includes("No chats, contacts or messages found") ? true : false
+        // // holds for 2 second just in case
+        // await sleep(2);
+
+        console.log("Searching in result contianer")
+        const numberDoesnotExist = await result?.evaluate((doc) => {
+            if (!doc) return false;
+            const textContent = doc.textContent;
+            if (!textContent) return;
+
+            return textContent.includes("No results found for");
         })
 
         console.log(`current number: ${currentNumber.toString().replace(/......../, "*********")} 
@@ -227,9 +253,7 @@ export async function verifyPhoneNumbers(
         }
         currentNumber++;
 
-        // clear the searchbox
-        await searchBox.click();
-
+        // await searchBox.click();
         await page.keyboard.down("Control");
         await searchBox.press("a");
         await page.keyboard.up("Control");
