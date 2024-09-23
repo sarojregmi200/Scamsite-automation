@@ -12,7 +12,6 @@ import {
     notFoundContactXpath,
     passwordFeildXpath,
     searchBoxXpath,
-    searchResultContainer,
 } from "./Constants";
 
 import chalk from "chalk";
@@ -118,6 +117,7 @@ export async function autoEntry(
                 ]);
                 verifiedCount++;
                 console.log(chalk.green(`Confirmed Verified Numbers ${verifiedCount}`));
+                await sleep(15);
             }
             else {
                 // clicking the delete btn;
@@ -133,11 +133,9 @@ export async function autoEntry(
                     deleteBtn.click(),
                     page.waitForNetworkIdle({ timeout: 0 }),
                 ]);
+                await page.waitForNavigation({ waitUntil: "load", timeout: 0 });
             }
-
-            await page.waitForNavigation({ waitUntil: "load" });
         }
-
     } catch (e) {
         console.log(chalk.red("caught error", e));
     }
